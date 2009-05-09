@@ -36,11 +36,11 @@
  *
  */
 
-/* -I/usr/include/libxml -lxml */
+/**/
 
 #import "AQXMLParser.h"
 
-#import <libxml/parser.h>
+#import <libxml/parser.h> // add  -I/usr/include/libxml -lxml  if you have No such file or directory errors
 #import <libxml/HTMLparser.h>
 #import <libxml/parserInternals.h>
 #import <libxml/SAX2.h>
@@ -761,7 +761,7 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 - (id) initWithData: (NSData *) data
 {
     NSInputStream * stream = [[NSInputStream alloc] initWithData: data];
-    _internal->expectedDataLength = (float) [data length];
+    [stream setProperty:[NSNumber numberWithUnsignedInt:[data length]] forKey:@"UncompressedDataLength"];
     id result = [self initWithStream: stream];
     [stream release];
     return ( result );
