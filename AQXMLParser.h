@@ -37,7 +37,6 @@
  */
 
 #import <Foundation/Foundation.h>
-#import "iPhoneNonatomic.h"
 
 @class _AQXMLParserInternal;
 @protocol AQXMLParserDelegate, AQXMLParserProgressDelegate;
@@ -61,13 +60,13 @@ extern NSString * const AQXMLParserParsingRunLoopMode;
 
 - (id) initWithData: (NSData *) data;   // creates a stream from the data
 
-@property (NS_NONATOMIC_IPHONEONLY assign) id<AQXMLParserDelegate> __weak delegate;
-@property (NS_NONATOMIC_IPHONEONLY assign) id<AQXMLParserProgressDelegate> __weak progressDelegate;
+@property (nonatomic, assign) id<AQXMLParserDelegate> __weak delegate;
+@property (nonatomic, assign) id<AQXMLParserProgressDelegate> __weak progressDelegate;
 
-@property (NS_NONATOMIC_IPHONEONLY assign) BOOL shouldProcessNamespaces;
-@property (NS_NONATOMIC_IPHONEONLY assign) BOOL shouldReportNamespacePrefixes;
-@property (NS_NONATOMIC_IPHONEONLY assign) BOOL shouldResolveExternalEntities;
-@property (NS_NONATOMIC_IPHONEONLY assign, getter=isInHTMLMode) BOOL HTMLMode;
+@property (nonatomic, assign) BOOL shouldProcessNamespaces;
+@property (nonatomic, assign) BOOL shouldReportNamespacePrefixes;
+@property (nonatomic, assign) BOOL shouldResolveExternalEntities;
+@property (nonatomic, assign, getter=isInHTMLMode) BOOL HTMLMode;
 
 - (BOOL) parse;
 - (void) abortParsing;
@@ -82,7 +81,7 @@ extern NSString * const AQXMLParserParsingRunLoopMode;
                                 selector: (SEL) completionSelector
                                  context: (void *) contextPtr;
 
-@property NS_NONATOMIC_IPHONEONLY(readonly) NSError * parserError;
+@property (nonatomic, readonly) NSError * parserError;
 
 @end
 
