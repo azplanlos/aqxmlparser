@@ -40,7 +40,7 @@
 
 #import "AQXMLParser.h"
 
-#import <libxml/parser.h> // add  -I/usr/include/libxml -lxml  if you have No such file or directory errors
+#import <libxml/parser.h> // add  -I/usr/include/libxml2 -lxml2  if you have No such file or directory errors
 #import <libxml/HTMLparser.h>
 #import <libxml/parserInternals.h>
 #import <libxml/SAX2.h>
@@ -395,10 +395,9 @@ static void __endElementNS( void * ctx, const xmlChar * localname, const xmlChar
 	AQXMLParser * parser = (AQXMLParser *) ctx;
 	id<AQXMLParserDelegate> delegate = parser.delegate;
 	
-	NSString * prefixStr = nil;
+    BOOL processNS = [parser shouldProcessNamespaces];    
 	
-	if ( [parser shouldProcessNamespaces] )
-		prefixStr = NSStringFromXmlChar(prefix);
+    NSString * prefixStr = NSStringFromXmlChar(prefix);
 	
 	NSString * localnameStr = NSStringFromXmlChar(localname);
 	
@@ -407,8 +406,19 @@ static void __endElementNS( void * ctx, const xmlChar * localname, const xmlChar
 		completeStr = [[NSString alloc] initWithFormat: @"%@:%@", prefixStr, localnameStr];
 	else
 		completeStr = [localnameStr retain];
-	
-	NSString * uriStr = NSStringFromXmlChar(URI);
+
+	NSString* elementName = processNS ? localnameStr : completeStr;
+    if (!elementName) elementName = localnameStr;
+
+    NSString* qualifiedName = completeStr;
+    if (!processNS) qualifiedName = 0;
+
+	NSString * uriStr = nil;
+	if ( processNS ) {
+		uriStr = NSStringFromXmlChar(URI);
+        if (uriStr == 0)
+            uriStr = @"";
+    }
 	
 	if ( [delegate respondsToSelector: @selector(parser:didEndElement:namespaceURI:qualifiedName:)] )
 	{
@@ -416,15 +426,10 @@ static void __endElementNS( void * ctx, const xmlChar * localname, const xmlChar
 		{
 			if ( (completeStr == nil) && (uriStr == nil) )
 				uriStr = @"";
+        }
 			
-			[delegate parser: parser didEndElement: localnameStr
-				namespaceURI: uriStr qualifiedName: completeStr];
-		}
-		else
-		{
-			[delegate parser: parser didEndElement: localnameStr
-				namespaceURI: nil qualifiedName: nil];
-		}
+        [delegate parser: parser didEndElement: elementName
+            namespaceURI: uriStr qualifiedName: qualifiedName];
 	}
 	
 	[parser _popNamespaces];
@@ -563,11 +568,20 @@ static void __startElementNS( void * ctx, const xmlChar *localname, const xmlCha
 	if ( [prefixStr length] != 0 )
 		completeStr = [[NSString alloc] initWithFormat: @"%@:%@", prefixStr, localnameStr];
 	else
-		completeStr = [localnameStr retain];
-	
+        completeStr = [localnameStr retain];
+
+	NSString* elementName = processNS ? localnameStr : completeStr;
+    if (!elementName) elementName = localnameStr;
+
+    NSString* qualifiedName = completeStr;
+    if (!processNS) qualifiedName = 0;
+    
 	NSString * uriStr = nil;
-	if ( processNS )
+	if ( processNS ) {
 		uriStr = NSStringFromXmlChar(URI);
+        if (uriStr == 0)
+            uriStr = @"";
+    }
 	
 	NSMutableDictionary * attrDict = [[NSMutableDictionary alloc] initWithCapacity: nb_attributes + nb_namespaces];
 	
@@ -584,6 +598,7 @@ static void __startElementNS( void * ctx, const xmlChar *localname, const xmlCha
 		if ( namespaces[i] == NULL )
 		{
 			qualifiedStr = @"xmlns";
+            namespaceStr = @"";
 		}
 		else
 		{
@@ -597,8 +612,9 @@ static void __startElementNS( void * ctx, const xmlChar *localname, const xmlCha
 		else
 			val = @"";
 		
-		[nsDict setObject: val forKey: completeStr];
-		[attrDict setObject: val forKey: qualifiedStr];
+        [nsDict setObject: val forKey: namespaceStr];
+        if (!processNS)
+            [attrDict setObject: val forKey: qualifiedStr];
 		
 		[namespaceStr release];
 		[qualifiedStr release];
@@ -647,9 +663,9 @@ static void __startElementNS( void * ctx, const xmlChar *localname, const xmlCha
 	if ( [delegate respondsToSelector: @selector(parser:didStartElement:namespaceURI:qualifiedName:attributes:)] )
 	{
 		[delegate parser: parser
-		 didStartElement: localnameStr
+		 didStartElement: elementName
 			namespaceURI: uriStr
-		   qualifiedName: completeStr
+		   qualifiedName: qualifiedName
 			  attributes: attrDict];
 	}
 	
