@@ -6,15 +6,19 @@ This is an extract of AQXMLParser from "AQToolkit":http://github.com/AlanQuaterm
 
 h2. Usage
 
-To use AQXMLParser add AQXMLParser.m and AQXMLParser.h to your project. 
-Add @$(SDKROOT)/usr/include/libxml2/@ to your @header search path@
-Add @-lxml2@ to your @other linker flags@
-Add @CFNetwork.framework@ to the exsisting frameworks.
+5 easy steps:
+
+# Add AQXMLParser.m and AQXMLParser.h to your project. 
+# Add @$(SDKROOT)/usr/include/libxml2/@ to your @header search path@
+# Add @-lxml2@ to your @other linker flags@
+# Add @CFNetwork.framework@ to the exsisting frameworks.
+# Replace the word NSXMLParser with AQXMLParser, and add #include "AQXMLParser.h" in affected sources
 
 h2. Contents
 
-It revolves around a new event-based XML parser, designed to function in nearly the same manner as NSXMLParser, with the same delegation routines. The main difference is that this version uses an NSInputStream as its data source, and it provides data in discrete blocks to the libxml2 parser library.
+It revolves around a new event-based XML parser, designed to function in nearly the same manner as NSXMLParser, with the same delegation routines. The main difference is that AQXMLParser is a streaming parser and it provides data in discrete blocks to the libxml2 parser library. This means significant memory savings for large XML documents - this can be especially important on iPhone. 
+It also allows NSInputStream/NSURLRequest as its data source - in addition to NSData and NSURL.
 
-Beyond the requirement of a stream, it is initialized, setup, and used in the same way as a standard NSXMLParser. Note that, for compile-time type checking, the delegate routines for AQXMLParser are declared again here, with AQXMLParser replacing NSXMLParser. These routines are now also declared inside a protocol using the @optional keyword, to match the new delegation API constructs used in the iPhone SDK.
+It is initialized, setup, and used in the same way as a standard NSXMLParser. Note that, for compile-time type checking, the delegate routines for AQXMLParser are declared again here, with AQXMLParser replacing NSXMLParser. These routines are now also declared inside a protocol using the @optional keyword, to match the new delegation API constructs used in the iPhone SDK. Also the use AQXMLParserDelegate protocol is optional.
 
 AQXMLParser is fully gc-compliant, or can be used in a managed-memory environment.

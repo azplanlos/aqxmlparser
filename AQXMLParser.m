@@ -56,6 +56,144 @@
 
 NSString * const AQXMLParserParsingRunLoopMode = @"AQXMLParserParsingRunLoopMode";
 
+// _AQNSURLConnectionStream is not a general stream implementation
+@interface _AQNSURLConnectionStream : NSInputStream 
+{
+    NSURLConnection* connection;
+    NSObject* delegate;
+    NSError* streamError;
+    NSStreamStatus streamStatus;
+    const void* currentData;
+    long currentDataLength;
+}
+
+@property (nonatomic,retain) NSObject* delegate;
+@property (nonatomic,retain) NSError* streamError;
+@property (nonatomic) NSStreamStatus streamStatus;
+
+- (id)initWithRequest:(NSURLRequest*)request;
+
+@end
+
+@implementation _AQNSURLConnectionStream
+
+@synthesize delegate;
+@synthesize streamError;
+@synthesize streamStatus;
+
+- (id)initWithRequest:(NSURLRequest*)request
+{
+    self = [super init];
+    if (self != nil) {
+        connection = [[NSURLConnection alloc] initWithRequest:request delegate:self startImmediately:NO];
+        [connection unscheduleFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
+        streamStatus = NSStreamStatusNotOpen;
+    }
+    return self;
+}
+
+- (void) dealloc
+{
+    self.streamError = 0;
+    self.delegate = 0;
+//    self.dataQueue = 0;
+    [connection release];
+    [super dealloc];
+}
+
+- (void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    streamStatus = NSStreamStatusOpen;
+}
+
+- (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data
+{
+    streamStatus = NSStreamStatusOpen;
+    currentData = [data bytes];
+    currentDataLength = [data length];
+    while (currentDataLength != 0) {
+        [delegate stream:self handleEvent: NSStreamEventHasBytesAvailable];
+    }
+    currentData = 0;
+    currentDataLength = 0;
+}
+ 
+
+    // reads up to length bytes into the supplied buffer, which must be at least of size len. Returns the actual number of bytes read.
+- (NSInteger)read:(uint8_t *)buffer maxLength:(NSUInteger)len
+{
+    if (currentData) {
+        NSUInteger copiedBytes = currentDataLength; 
+        if (copiedBytes > len) 
+            copiedBytes = len;
+        memcpy(buffer,currentData,copiedBytes);
+        currentData += copiedBytes;
+        currentDataLength -= copiedBytes;
+        return copiedBytes;
+    } else {
+        return 0;
+    }
+}
+
+- (BOOL)getBuffer:(uint8_t **)buffer length:(NSUInteger *)len
+{
+    return NO;
+}
+
+- (BOOL)hasBytesAvailable
+{
+    return (currentDataLength != 0);
+}
+
+
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error 
+{
+    streamStatus = NSStreamStatusError;
+    self.streamError = error;
+    [delegate stream:self handleEvent: NSStreamEventErrorOccurred];
+}
+
+- (void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    streamStatus = NSStreamStatusAtEnd;
+    [delegate stream:self handleEvent: NSStreamEventEndEncountered];
+}
+
+- (id)propertyForKey:(NSString *)key
+{
+    return 0;
+}
+
+- (BOOL)setProperty:(id)property forKey:(NSString *)key
+{
+    return NO;
+}
+
+
+- (void)scheduleInRunLoop:(NSRunLoop *)aRunLoop forMode:(NSString *)mode
+{
+    [connection scheduleInRunLoop:aRunLoop forMode:mode];
+}
+
+- (void)removeFromRunLoop:(NSRunLoop *)aRunLoop forMode:(NSString *)mode;
+{   
+    [connection unscheduleFromRunLoop:aRunLoop forMode:mode];
+}
+
+- (void)open
+{
+    streamStatus = NSStreamStatusOpening;
+    [connection start];
+}
+
+- (void)close
+{
+    [connection cancel];
+}
+
+@end
+
+
 @interface _AQXMLParserInternal : NSObject
 {
 	@public
@@ -390,6 +528,43 @@ static void __endDocument( void * ctx )
 	[delegate parserDidEndDocument: parser];
 }
 
+static NSString* __createCompleteStr(NSString* prefixStr, NSString* localnameStr)
+{
+	if ( [prefixStr length] != 0 ) {
+        NSMutableString* result = [[NSMutableString alloc] initWithCapacity:[prefixStr length]+[localnameStr length]+1];
+        [result appendString:prefixStr];
+        [result appendString:@":"];
+        [result appendString:localnameStr];
+		return result;
+	} else
+        return [localnameStr retain];    
+}
+
+static NSString* __elementName(BOOL processNS, NSString* localnameStr, NSString* completeStr)
+{
+    NSString* elementName =processNS ? localnameStr : completeStr;
+    if (!elementName) elementName = localnameStr;
+    return elementName;
+}
+
+static NSString* __qualifiedName(BOOL processNS, NSString* completeStr)
+{
+    NSString* qualifiedName = completeStr;
+    if (!processNS) qualifiedName = 0;
+    return qualifiedName;    
+}
+
+static NSString* __createUriStr(BOOL processNS, const xmlChar* URI)
+{
+ 	NSString * uriStr = nil;
+	if ( processNS ) {
+		uriStr = NSStringFromXmlChar(URI);
+        if (uriStr == 0)
+            uriStr = @"";
+    }   
+    return uriStr;
+}
+
 static void __endElementNS( void * ctx, const xmlChar * localname, const xmlChar * prefix, const xmlChar * URI )
 {
 	AQXMLParser * parser = (AQXMLParser *) ctx;
@@ -397,28 +572,14 @@ static void __endElementNS( void * ctx, const xmlChar * localname, const xmlChar
 	
     BOOL processNS = [parser shouldProcessNamespaces];    
 	
-    NSString * prefixStr = NSStringFromXmlChar(prefix);
-	
+	NSString * prefixStr = NSStringFromXmlChar(prefix);
 	NSString * localnameStr = NSStringFromXmlChar(localname);
 	
-	NSString * completeStr = nil;
-	if ( [prefixStr length] != 0 )
-		completeStr = [[NSString alloc] initWithFormat: @"%@:%@", prefixStr, localnameStr];
-	else
-		completeStr = [localnameStr retain];
-
-	NSString* elementName = processNS ? localnameStr : completeStr;
-    if (!elementName) elementName = localnameStr;
-
-    NSString* qualifiedName = completeStr;
-    if (!processNS) qualifiedName = 0;
-
-	NSString * uriStr = nil;
-	if ( processNS ) {
-		uriStr = NSStringFromXmlChar(URI);
-        if (uriStr == 0)
-            uriStr = @"";
-    }
+	NSString * completeStr = __createCompleteStr(prefixStr,localnameStr);
+	NSString* elementName = __elementName(processNS,localnameStr,completeStr);
+    NSString* qualifiedName = __qualifiedName(processNS,completeStr);
+    
+    NSString * uriStr = __createUriStr(processNS,URI);
 	
 	if ( [delegate respondsToSelector: @selector(parser:didEndElement:namespaceURI:qualifiedName:)] )
 	{
@@ -551,6 +712,8 @@ static xmlEntityPtr __getEntity( void * ctx, const xmlChar * name )
 	return ( NULL );
 }
 
+
+
 static void __startElementNS( void * ctx, const xmlChar *localname, const xmlChar *prefix,
 							 const xmlChar *URI, int nb_namespaces, const xmlChar **namespaces,
 							 int nb_attributes, int nb_defaulted, const xmlChar **attributes)
@@ -564,24 +727,12 @@ static void __startElementNS( void * ctx, const xmlChar *localname, const xmlCha
 	NSString * prefixStr = NSStringFromXmlChar(prefix);
 	NSString * localnameStr = NSStringFromXmlChar(localname);
 	
-	NSString * completeStr = nil;
-	if ( [prefixStr length] != 0 )
-		completeStr = [[NSString alloc] initWithFormat: @"%@:%@", prefixStr, localnameStr];
-	else
-        completeStr = [localnameStr retain];
+	NSString* completeStr = __createCompleteStr(prefixStr,localnameStr);
+	NSString* elementName = __elementName(processNS,localnameStr,completeStr);
 
-	NSString* elementName = processNS ? localnameStr : completeStr;
-    if (!elementName) elementName = localnameStr;
-
-    NSString* qualifiedName = completeStr;
-    if (!processNS) qualifiedName = 0;
+    NSString* qualifiedName = __qualifiedName(processNS,completeStr);
     
-	NSString * uriStr = nil;
-	if ( processNS ) {
-		uriStr = NSStringFromXmlChar(URI);
-        if (uriStr == 0)
-            uriStr = @"";
-    }
+    NSString * uriStr = __createUriStr(processNS,URI);
 	
 	NSMutableDictionary * attrDict = [[NSMutableDictionary alloc] initWithCapacity: nb_attributes + nb_namespaces];
 	
@@ -613,6 +764,7 @@ static void __startElementNS( void * ctx, const xmlChar *localname, const xmlCha
 			val = @"";
 		
         [nsDict setObject: val forKey: namespaceStr];
+
         if (!processNS)
             [attrDict setObject: val forKey: qualifiedStr];
 		
@@ -774,6 +926,35 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 	return ( self );
 }
 
+- (id) initWithResultOfURLRequest:(NSURLRequest*)request
+{
+    _AQNSURLConnectionStream* stream = [[[_AQNSURLConnectionStream alloc] initWithRequest:request] autorelease];
+    return [self initWithStream:stream];
+}
+
+
+- (id)initWithContentsOfURL:(NSURL *)url
+{
+#if 0
+    CFStringRef requestMethod = (CFStringRef)@"GET";
+    CFHTTPMessageRef myRequest = CFHTTPMessageCreateRequest(kCFAllocatorDefault,
+        requestMethod, (CFURLRef)url, kCFHTTPVersion1_1);
+    //CFHTTPMessageSetBody(myRequest, bodyData);
+    //CFHTTPMessageSetHeaderFieldValue(myRequest, headerField, value);
+    CFHTTPMessageSetHeaderFieldValue(myRequest, CFSTR("Accept-Encoding"), CFSTR("gzip, deflate"));
+ 
+    CFReadStreamRef myReadStream = CFReadStreamCreateForHTTPRequest(kCFAllocatorDefault, myRequest);
+ 
+    CFReadStreamOpen(myReadStream);
+    id result = [self initWithStream:(NSInputStream*)myReadStream];
+    CFRelease(myReadStream);
+    return result;
+#else
+    NSURLRequest* request = [NSURLRequest requestWithURL:url];
+    return [self initWithResultOfURLRequest:request];
+#endif
+}
+
 - (id) initWithData: (NSData *) data
 {
     NSInputStream * stream = [[NSInputStream alloc] initWithData: data];
@@ -895,6 +1076,76 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
         _internal->parserFlags &= ~AQXMLParserHTMLMode;
 }
 
+- (BOOL) hasInput
+{
+    if ( _stream == nil )
+		return ( NO );    
+    return YES;
+}
+
+- (BOOL) inputHasBytesAvailable
+{
+    return [_stream hasBytesAvailable];
+}
+
+- (size_t) inputReadAvailableInitialBytes:(uint8_t*)buffer maxLength:(size_t)maxLength
+{
+    return [_stream read: buffer maxLength: maxLength];
+}
+
+- (void)inputScheduleInRunLoop:(NSRunLoop*)runloop forMode:(NSString*)mode
+{
+	[_stream setDelegate: self];
+	[_stream scheduleInRunLoop: runloop forMode: mode];
+	
+	if ( [_stream streamStatus] == NSStreamStatusNotOpen )
+		[_stream open];
+}
+
+- (void)inputRemoveFromRunLoop:(NSRunLoop*)runloop forMode:(NSString*)mode
+{
+	[_stream setDelegate: nil];
+	[_stream removeFromRunLoop:runloop
+                       forMode:mode];
+	[_stream close];
+}
+
+- (void)inputRunRunLoopInMode:(NSString*)mode
+{
+    [[NSRunLoop currentRunLoop] runMode:  mode
+                             beforeDate: [NSDate distantFuture]];
+}
+
+- (float)inputExpectedLength
+{
+    float result = 0.0;
+    CFHTTPMessageRef msg = (CFHTTPMessageRef) [_stream propertyForKey: (NSString *)kCFStreamPropertyHTTPResponseHeader];
+    if ( msg != NULL )
+    {
+        CFStringRef str = CFHTTPMessageCopyHeaderFieldValue( msg, CFSTR("Content-Length") );
+        if ( str != NULL )
+        {
+            result = [(NSString *)str floatValue];
+            CFRelease( str );
+        }
+        return result;
+    }
+    
+    CFNumberRef num = (CFNumberRef) [_stream propertyForKey: (NSString *)kCFStreamPropertyFTPResourceSize];
+    if ( num != NULL )
+    {
+        result = [(NSNumber *)num floatValue];
+        CFRelease( num );
+        return result;
+    }
+    
+    // for some forthcoming stream classes...
+    NSNumber * guess = [_stream propertyForKey: @"UncompressedDataLength"];
+    if ( guess != nil )
+        result = [guess floatValue];
+    return result;
+}
+
 - (BOOL) parse
 {
 	if ( [self parseAsynchronouslyUsingRunLoop: [NSRunLoop currentRunLoop]
@@ -910,19 +1161,17 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 	do
 	{
 		NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
-		[[NSRunLoop currentRunLoop] runMode: AQXMLParserParsingRunLoopMode
-                                 beforeDate: [NSDate distantFuture]];
+        [self inputRunRunLoopInMode:AQXMLParserParsingRunLoopMode];
 		[pool drain];
 		
 	} while ( _streamComplete == NO );
 	
-	[_stream setDelegate: nil];
-	[_stream removeFromRunLoop: [NSRunLoop currentRunLoop]
-                       forMode: AQXMLParserParsingRunLoopMode];
-	[_stream close];
+    [self inputRemoveFromRunLoop:[NSRunLoop currentRunLoop] forMode:AQXMLParserParsingRunLoopMode];
 	
 	return ( _internal->error == nil );
 }
+
+
 
 - (BOOL) parseAsynchronouslyUsingRunLoop: (NSRunLoop *) runloop
                                     mode: (NSString *) mode
@@ -930,8 +1179,8 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
                                 selector: (SEL) completionSelector
                                  context: (void *) contextPtr
 {
-    if ( _stream == nil )
-		return ( NO );
+    if (![self hasInput]) 
+        return NO;
 	
 	xmlSAXHandlerPtr saxHandler = NULL;
 	if ( self.delegate != nil )
@@ -945,9 +1194,9 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 	
 	_streamComplete = NO;
 	
-	if ( [_stream hasBytesAvailable] )
+	if ( [self inputHasBytesAvailable] )
     {
-		buflen = [_stream read: buf maxLength: 4];
+		buflen = [self inputReadAvailableInitialBytes:buf maxLength: 4];
         [self _initializeParserWithBytes: buf length: buflen];
     }
     
@@ -957,11 +1206,7 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
     _internal->asyncContext  = contextPtr;
 	
 	// start the stream processing going
-	[_stream setDelegate: self];
-	[_stream scheduleInRunLoop: runloop forMode: mode];
-	
-	if ( [_stream streamStatus] == NSStreamStatusNotOpen )
-		[_stream open];
+    [self inputScheduleInRunLoop:runloop forMode:mode];
     
     return ( YES );
 }
@@ -994,8 +1239,9 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 			
 		case NSStreamEventHasBytesAvailable:
 		{
-			uint8_t buf[1024];
-			int len = [input read: buf maxLength: 1024];
+            const long maxBufferSize = 4*1024;
+			uint8_t buf[maxBufferSize];
+			int len = [input read: buf maxLength: maxBufferSize];
 			if ( len > 0 )
                 [self _pushXMLData: buf length: len];
 			
@@ -1172,7 +1418,7 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
     
         int options = [self shouldResolveExternalEntities] ? 
                 XML_PARSE_RECOVER | XML_PARSE_NOENT | XML_PARSE_DTDLOAD :
-                XML_PARSE_RECOVER | XML_PARSE_DTDATTR;
+                XML_PARSE_RECOVER;
         
         xmlCtxtUseOptions( _internal->parserContext, options );
     }
@@ -1240,30 +1486,7 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 
 - (void) _setupExpectedLength
 {
-    CFHTTPMessageRef msg = (CFHTTPMessageRef) [_stream propertyForKey: (NSString *)kCFStreamPropertyHTTPResponseHeader];
-    if ( msg != NULL )
-    {
-        CFStringRef str = CFHTTPMessageCopyHeaderFieldValue( msg, CFSTR("Content-Length") );
-        if ( str != NULL )
-        {
-            _internal->expectedDataLength = [(NSString *)str floatValue];
-            CFRelease( str );
-        }
-        return;
-    }
-    
-    CFNumberRef num = (CFNumberRef) [_stream propertyForKey: (NSString *)kCFStreamPropertyFTPResourceSize];
-    if ( num != NULL )
-    {
-        _internal->expectedDataLength = [(NSNumber *)num floatValue];
-        CFRelease( num );
-        return;
-    }
-    
-    // for some forthcoming stream classes...
-    NSNumber * guess = [_stream propertyForKey: @"UncompressedDataLength"];
-    if ( guess != nil )
-        _internal->expectedDataLength = [guess floatValue];
+    _internal->expectedDataLength = [self inputExpectedLength];
 }
 
 @end

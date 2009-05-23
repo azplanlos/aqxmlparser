@@ -44,7 +44,6 @@
 extern NSString * const AQXMLParserParsingRunLoopMode;
 
 // delegates should implement the same functions used by AQXMLParser
-
 @interface AQXMLParser : NSObject
 {
 	void *                                  _parser;
@@ -57,10 +56,11 @@ extern NSString * const AQXMLParserParsingRunLoopMode;
 
 // designated initializer
 - (id) initWithStream: (NSInputStream *) stream;
-
+- (id) initWithContentsOfURL:(NSURL *)url;
+- (id) initWithResultOfURLRequest:(NSURLRequest*)urlRequest;
 - (id) initWithData: (NSData *) data;   // creates a stream from the data
 
-@property (nonatomic, assign) id<AQXMLParserDelegate> __weak delegate;
+@property (nonatomic, assign) id __weak delegate;
 @property (nonatomic, assign) id<AQXMLParserProgressDelegate> __weak progressDelegate;
 
 @property (nonatomic, assign) BOOL shouldProcessNamespaces;
