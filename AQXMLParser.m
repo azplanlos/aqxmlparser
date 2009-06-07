@@ -1223,7 +1223,7 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 			
 		case NSStreamEventErrorOccurred:
 		{
-			_internal->error = [input streamError];
+			_internal->error = [[input streamError] retain];
 			if ( [_delegate respondsToSelector: @selector(parser:parseErrorOccurred:)] )
 				[_delegate parser: self parseErrorOccurred: _internal->error];
 			[self _setStreamComplete: NO];
@@ -1239,9 +1239,13 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 			
 		case NSStreamEventHasBytesAvailable:
 		{
+			if ( _internal->delegateAborted )
+			    break;
+ 
             const long maxBufferSize = 4*1024;
-			uint8_t buf[maxBufferSize];
-			int len = [input read: buf maxLength: maxBufferSize];
+            uint8_t buf[maxBufferSize];
+            int len = [input read: buf maxLength: maxBufferSize];
+           
 			if ( len > 0 )
                 [self _pushXMLData: buf length: len];
 			
@@ -1257,6 +1261,7 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 	
 	_internal->delegateAborted = YES;
 	xmlStopParser( _internal->parserContext );
+    [self _setStreamComplete: NO];  // must tell any async delegates that we're done parsing
 }
 
 - (NSError *) parserError
