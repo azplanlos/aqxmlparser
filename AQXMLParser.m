@@ -958,8 +958,8 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 - (id) initWithData: (NSData *) data
 {
     NSInputStream * stream = [[NSInputStream alloc] initWithData: data];
-    [stream setProperty:[NSNumber numberWithUnsignedInt:[data length]] forKey:@"UncompressedDataLength"];
     id result = [self initWithStream: stream];
+    _internal->expectedDataLength = (float) [data length];
     [stream release];
     return ( result );
 }
