@@ -10,22 +10,43 @@
 
 #import "AQXMLParser.h"
 
-@interface MyParserDelegate : NSObject<AQXMLParserDelegate>
+@interface AbortParseAtItemElement : NSObject<AQXMLParserDelegate>
+{
+}
+@end
+
+@implementation AbortParseAtItemElement
+
+- (void)parser:(AQXMLParser*)parser didEndElement:(NSString*)element namespaceURI:(NSString*)uri qualifiedName:(NSString*)qname
+{
+    if ([element isEqualToString:@"item"]) {
+        [parser abortParsing];
+    }
+    return;
+}
+
+@end
+
+
+
+@interface CollectMethodsDelegate : NSObject<AQXMLParserDelegate>
 {
     NSMutableArray* invokedMethods;
+    id delegate;
 }
 
 - (NSArray*)invokedMethods;
 
 @end
 
-@implementation MyParserDelegate
+@implementation CollectMethodsDelegate
 
-- (id) init
+- (id) initWithDelegate:(id)inDelegate
 {
     self = [super init];
     if (self != nil) {
         invokedMethods = [[NSMutableArray alloc]init];
+        delegate = inDelegate;
     }
     return self;
 }
@@ -50,6 +71,9 @@
 {
     [inv retainArguments];
     [invokedMethods addObject:inv];
+    if ([delegate respondsToSelector:[inv selector]]) {
+        [inv invokeWithTarget:delegate];
+    }
 }
 
 @end
@@ -65,8 +89,7 @@
 
 @implementation AQXMLParserTestCase
 
-
-- (void)_compareAQWithNSWithXML:(NSString*)xml
+- (void)_compareAQWithNSWithXML:(NSString*)xml delegate:(id)delegate reportExtraMethods:(BOOL)reportExtraMethods
 {
     for (int variation = 0; variation < 8;++variation)
     {
@@ -81,7 +104,7 @@
             [parser setShouldProcessNamespaces:shouldProcessNamespace];
             [parser setShouldReportNamespacePrefixes:shouldReportNamespacePrefixes];
             [parser setShouldResolveExternalEntities:shouldResolveExternalEntities];
-            MyParserDelegate* delegate1 = [[[MyParserDelegate alloc] init] autorelease];
+            CollectMethodsDelegate* delegate1 = [[[CollectMethodsDelegate alloc] initWithDelegate:delegate] autorelease];
             parser.delegate = delegate1;
             [parser parse];
             aqmethods = [delegate1 invokedMethods];
@@ -92,14 +115,16 @@
             [parser setShouldProcessNamespaces:shouldProcessNamespace];
             [parser setShouldReportNamespacePrefixes:shouldReportNamespacePrefixes];
             [parser setShouldResolveExternalEntities:shouldResolveExternalEntities];
-            MyParserDelegate* delegate2 = [[[MyParserDelegate alloc] init] autorelease];
+            CollectMethodsDelegate* delegate2 = [[[CollectMethodsDelegate alloc] initWithDelegate:delegate] autorelease];
             parser.delegate = delegate2;
             [parser parse];
             nsmethods = [delegate2 invokedMethods];
         }
         
-        STAssertEquals([aqmethods count],[nsmethods count],@" - number of messages received by delegates are different");
-        for (int i = 0; i < [aqmethods count]; ++i) {
+        if (reportExtraMethods) {
+            STAssertEquals([aqmethods count],[nsmethods count],@" - number of messages received by delegates are different");
+        }
+        for (int i = 0; (i < [aqmethods count]) && (i < [nsmethods count]); ++i) {
             NSInvocation* nsinvocation = [nsmethods objectAtIndex:i];
             NSInvocation* aqinvocation = [aqmethods objectAtIndex:i];
             
@@ -124,7 +149,27 @@
                 }
             }
         }
+        if (reportExtraMethods && ([aqmethods count] != [nsmethods count])) {
+            NSArray* more = aqmethods;
+            NSString* more_name = @"AQXMLParser";
+            NSArray* less = nsmethods;
+            NSString* less_name = @"NSXMLParser";
+            if ([aqmethods count] < [nsmethods count]) {
+                more_name = @"NSXMLParser";
+                less_name = @"AQXMLParser";
+                more = nsmethods;
+                less = aqmethods;
+            }
+            for (int i = [less count]; i < [more count]; ++i) {
+               STFail(@"%@ has extra method: %@",more_name,NSStringFromSelector([[more objectAtIndex:i] selector]));
+            }
+        }
     }
+}
+
+- (void)_compareAQWithNSWithXML:(NSString*)xml
+{
+    [self _compareAQWithNSWithXML:xml delegate:0 reportExtraMethods:YES];
 }
 
 - (void)testSmoke
@@ -220,15 +265,37 @@
 - (void)testXMLWithMissingEndTagError
 {
     NSString* xml = @"<?xml version=\"1.0\"?> \
-                    @<foo><bar></foo>";
+                    <foo><bar></foo>";
     [self _compareAQWithNSWithXML:xml]; 
 }
+
+- (void)testXMLWithInvalidText
+{
+    NSString* xml = @"<?xml version=\"1.0\"?> \
+                    invalid <foo/>";
+    [self _compareAQWithNSWithXML:xml]; 
+} 
+
+- (void)testXMLNonSingleRoot
+{
+    NSString* xml = @"<?xml version=\"1.0\"?> \
+                      <foo/><foo/>";
+    [self _compareAQWithNSWithXML:xml]; 
+} 
 
 - (void)testXMLWithMissingEndError
 {
     NSString* xml = @"<?xml version=\"1.0\"?> \
-                    @<foo><bar";
+                    <foo><bar";
     [self _compareAQWithNSWithXML:xml]; 
+} 
+
+- (void)testAbortDuringParse
+{
+    NSString* xml = @"<?xml version=\"1.0\"?> \
+                      <foo><item></item></foo>";
+    id abortParse = [[[AbortParseAtItemElement alloc] init] autorelease];
+    [self _compareAQWithNSWithXML:xml delegate:abortParse reportExtraMethods:NO]; 
 } 
 
 @end
