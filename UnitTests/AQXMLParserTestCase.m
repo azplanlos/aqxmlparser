@@ -160,6 +160,9 @@
                 more = nsmethods;
                 less = aqmethods;
             }
+            for (int i = 0; i < [less count]; ++i) {
+                NSLog(@"Method:%d=%@\n",i,NSStringFromSelector([[more objectAtIndex:i] selector]));
+            }
             for (int i = [less count]; i < [more count]; ++i) {
                STFail(@"%@ has extra method: %@",more_name,NSStringFromSelector([[more objectAtIndex:i] selector]));
             }

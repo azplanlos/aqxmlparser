@@ -1142,7 +1142,6 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
     if ( num != NULL )
     {
         result = [(NSNumber *)num floatValue];
-        CFRelease( num );
         return result;
     }
     
