@@ -206,6 +206,7 @@ NSString * const AQXMLParserParsingRunLoopMode = @"AQXMLParserParsingRunLoopMode
 	NSError *			error;
 	NSMutableArray *	namespaces;
 	BOOL				delegateAborted;
+    BOOL                reportedError;
     
     // async parse callback data
     id                  asyncDelegate;
@@ -526,7 +527,7 @@ static void __endDocument( void * ctx )
 {
 	AQXMLParser * parser = (AQXMLParser *) ctx;
 	id<AQXMLParserDelegate> delegate = parser.delegate;
-	
+    
 	if ( [delegate respondsToSelector: @selector(parserDidEndDocument:)] == NO )
 		return;
 	
@@ -654,10 +655,14 @@ static void __errorCallback( void * ctx, const char * msg, ... )
 	AQXMLParser * parser = (AQXMLParser *) ctx;
 	xmlParserCtxtPtr p = [parser _xmlParserContext];
 	id<AQXMLParserDelegate> delegate = parser.delegate;
+    _AQXMLParserInternal * info = [parser _info];
 	
+    if (info->reportedError)
+        return;
+    
 	if ( [delegate respondsToSelector: @selector(parser:parseErrorOccurred:)] == NO )
 		return;
-	
+	info->reportedError = YES;
 	[delegate parser: parser parseErrorOccurred: [NSError errorWithDomain: NSXMLParserErrorDomain
 																	 code: p->errNo
 																 userInfo: nil]];
@@ -668,11 +673,15 @@ static void __structuredErrorFunc( void * ctx, xmlErrorPtr errorData )
 	AQXMLParser * parser = (AQXMLParser *) ctx;
 	id<AQXMLParserDelegate> delegate = parser.delegate;
 	_AQXMLParserInternal * info = [parser _info];
+
+    if (info->reportedError) 
+        return;
 	
 	if ( [delegate respondsToSelector: @selector(parser:parseErrorOccurred:)] == NO )
 		return;
 	
 	int code = info->delegateAborted ? 0x200 : errorData->code;
+    info->reportedError = YES;
 	[delegate parser: parser parseErrorOccurred: [NSError errorWithDomain: NSXMLParserErrorDomain
 																	 code: code
 																 userInfo: nil]];
@@ -1231,7 +1240,7 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 		{
 			_internal->error = [[input streamError] retain];
 			if ( [_delegate respondsToSelector: @selector(parser:parseErrorOccurred:)] )
-				[_delegate parser: self parseErrorOccurred: _internal->error];
+				[_delegate parser:(id)self parseErrorOccurred: _internal->error];
 			[self _setStreamComplete: NO];
 			break;
 		}
@@ -1250,7 +1259,7 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 			if ( _internal->delegateAborted )
 			    break;
  
-            const long maxBufferSize = 1024;
+            const long maxBufferSize = 4*1024;
             uint8_t buf[maxBufferSize];
             int len = [input read: buf maxLength: maxBufferSize];
            
@@ -1342,7 +1351,7 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 		{
 			for ( NSString * key in nsDict )
 			{
-				[_delegate parser: self didStartMappingPrefix: key toURI: [nsDict objectForKey: key]];
+				[_delegate parser:(id)self didStartMappingPrefix: key toURI: [nsDict objectForKey: key]];
 			}
 		}
 	}
@@ -1364,7 +1373,7 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
 		{
 			for ( NSString * key in obj )
 			{
-				[_delegate parser: self didEndMappingPrefix: key];
+				[_delegate parser: (id)self didEndMappingPrefix: key];
 			}
 		}
 	}
@@ -1430,7 +1439,7 @@ static void __ignorableWhitespace( void * ctx, const xmlChar * ch, int len )
                                                            length, NULL );
     
         int options = [self shouldResolveExternalEntities] ? 
-                XML_PARSE_RECOVER | XML_PARSE_NOENT | XML_PARSE_DTDLOAD :
+                /*XML_PARSE_RECOVER | */XML_PARSE_NOENT | XML_PARSE_DTDLOAD :
                 XML_PARSE_RECOVER;
         
         xmlCtxtUseOptions( _internal->parserContext, options );

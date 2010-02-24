@@ -47,11 +47,12 @@ extern NSString * const AQXMLParserParsingRunLoopMode;
 @interface AQXMLParser : NSObject
 {
 	void *                                  _parser;
-	id<AQXMLParserDelegate> __weak          _delegate;
+	id __weak                               _delegate;
     id<AQXMLParserProgressDelegate> __weak  _progressDelegate;
 	NSInputStream *                         _stream;
 	_AQXMLParserInternal *                  _internal;
 	BOOL                                    _streamComplete;
+    BOOL                                    _abortOnError;
 }
 
 // designated initializer

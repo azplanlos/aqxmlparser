@@ -99,13 +99,13 @@
     }
     switch (indexPath.row) {
         case 0: {
-            cell.text = [NSString stringWithFormat:NSLocalizedString(@"Mean Download Time: %fs", @"Mean Download Time format"), MeanDownloadTimeForParserType(indexPath.section)];
+            cell.textLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Mean Download Time: %fs", @"Mean Download Time format"), MeanDownloadTimeForParserType(indexPath.section)];
         } break;
         case 1: {
-            cell.text = [NSString stringWithFormat:NSLocalizedString(@"Mean Parse Time: %fs", @"Mean Parse Time format"), MeanParseTimeForParserType(indexPath.section)];
+            cell.textLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Mean Parse Time: %fs", @"Mean Parse Time format"), MeanParseTimeForParserType(indexPath.section)];
         } break;
         case 2: {
-            cell.text = [NSString stringWithFormat:NSLocalizedString(@"Mean Total Time: %fs", @"Mean Total Time format"), MeanTotalTimeForParserType(indexPath.section)];
+            cell.textLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Mean Total Time: %fs", @"Mean Total Time format"), MeanTotalTimeForParserType(indexPath.section)];
         } break;
     }
     return cell;
