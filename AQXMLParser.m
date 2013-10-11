@@ -48,11 +48,8 @@
 #import <libxml/encoding.h>
 #import <libxml/entities.h>
 
-#if TARGET_OS_IPHONE
+
 # import <CFNetwork/CFNetwork.h>
-#else
-# import <CoreServices/../Frameworks/CFNetwork.framework/Headers/CFNetwork.h>
-#endif
 
 NSString * const AQXMLParserParsingRunLoopMode = @"AQXMLParserParsingRunLoopMode";
 
