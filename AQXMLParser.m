@@ -41,7 +41,6 @@
 #import "AQXMLParser.h"
 
 #import <libxml/parser.h> // add  -I/usr/include/libxml2 -lxml2  if you have No such file or directory errors
-#import <libxml/HTMLparser.h>
 #import <libxml/parserInternals.h>
 #import <libxml/SAX2.h>
 #import <libxml/xmlerror.h>
